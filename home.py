@@ -6,7 +6,8 @@ import folium
 from streamlit_folium import st_folium
 import geopandas as gpd
 from streamlit_elements import elements, dashboard, mui, editor, media, lazy, sync, nivo
-
+import thaidata as td
+import pandas as pd
 
 st.set_page_config(page_title='Nasa Fire Detection', layout='wide')
 
@@ -16,11 +17,11 @@ st.title("Nasa Fire Detection")
 # Add text
 st.write("Welcome to COOP Project")
 
+@st.cache_data
+def province_opt():
+    return ['-'] + td.Province().get_all_name()
 
 
-# Fire point
-firepoint_gdf = gpd.read_file(r'C:\coop_project_fire_spot\Fire-Spot-Thailand\data\2023-05-22')
-df = firepoint_gdf.loc[:, ['latitude', 'longitude', 'confidence', 'th_date', 'th_time', 'ADM3_TH', 'ADM2_TH', 'ADM1_TH']]
 def mapping_color(x):
     if 0 <= x <= 50:
         return 'green'
@@ -28,19 +29,29 @@ def mapping_color(x):
         return 'orange'
     elif 81 <= x <= 100:
         return 'red'
+    
+# Fire point
+@st.cache_data
+def get_data():
+    firepoint_gdf = gpd.read_file(r'C:\coop_project_fire_spot\Fire-Spot-Thailand\data\2023-05-22')
+    firepoint_gdf['color'] = firepoint_gdf['confidence'].map(mapping_color)
+    
+    return firepoint_gdf
 
-firepoint_gdf['color'] = firepoint_gdf['confidence'].map(mapping_color)
+# firepoint_gdf = get_data()
+df = get_data().loc[:, ['latitude', 'longitude', 'confidence', 'th_date', 'th_time', 'ADM3_TH', 'ADM2_TH', 'ADM1_TH', 'color']]
+
 
 with st.container():
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
-        st.selectbox('จังหวัด', [])
+        st.selectbox('จังหวัด', province_opt(), key='prov_name')
 
     with col2:
-        st.selectbox('อำเภอ', [])
+        st.selectbox('อำเภอ', ['-'] + td.Amphoe().search(st.session_state['prov_name']), key='amphoe_name')
     
     with col3:
-        st.selectbox('ตำบล', [])
+        st.selectbox('ตำบล', ['-'] + td.Tambon().search(st.session_state['prov_name'], st.session_state['amphoe_name']))
 
     map_col, table_col = st.columns([1, 1])
     with map_col:
@@ -49,7 +60,7 @@ with st.container():
 
         fg = folium.FeatureGroup(name="Fire Point")
 
-        for point in firepoint_gdf.itertuples():
+        for point in df.itertuples():
             fg.add_child(
                 folium.Marker(
                     location=[point.latitude, point.longitude],
